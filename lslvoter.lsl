@@ -31,6 +31,7 @@ string _VOTE_READY = "Vote ready";
 string _READY_TO_VOTE = "Ready to vote";
 string _VOTING = "Voting";
 string _STOP = "Stop";
+string _WRONG_VOTE_VALUE = "Wrong vote value";
 // infos
 string _DISPLAYING_INFOS = "Displaying infos";
 string _INFOS = "Infos";
@@ -43,6 +44,7 @@ string _MY_VOTE_IS = "My vote is";
 string _HELP = "Help";
 string _HELP_HELP = "Displays this help message";
 string _HELP_MY = "Displays my personnal infos (uuid, name, code, vote)";
+string _HELP_VOTE = "Allows you to vote using the command line instead of touching the object";
 string _HELP_RESET = "Resets the script (only for owner)";
 string _HELP_STOP = "Stops the vote and displays results (only for owner)";
 string _HELP_INFOS = "Displays the vote infos (who has not voted)(only for owner)";
@@ -260,27 +262,53 @@ parseCommand(key id, string message)
     {
         displayMy(id, 1);
     }
+    else if (command == "vote")
+    {
+        // get the voter and value
+        voter = id;
+        // get the vote value
+        integer votes_index = llListFindList(votes_values, [value]);
+        if (votes_index != -1)
+        {
+            vote = votes_index + 2;
+            state vote;
+        }
+        else
+        {
+            llInstantMessage(id, _WRONG_VOTE_VALUE);
+        }
+
+    }
 }
 
 displayHelp(key id)
 {
-    llInstantMessage(
-    id,
-    "\n===================\n" + _HELP + "\n===================\n" +
-    "/" + LISTEN_CHANNEL + " help\n" +
-    _HELP_HELP + "\n" +
-    "/" + LISTEN_CHANNEL + " my\n" +
-    _HELP_MY + "\n" +
-    "/" + LISTEN_CHANNEL + " reset\n" +
-    _HELP_RESET + "\n" +
-    "/" + LISTEN_CHANNEL + " stop\n" +
-    _HELP_STOP + "\n" +
-    "/" + LISTEN_CHANNEL + " infos\n" +
-    _HELP_INFOS + "\n" +
-    "/" + LISTEN_CHANNEL + " name:<vote_name>\n" +
-    _HELP_NAME + "\n" +
-    "------------------------"
-    );
+    string help_text = "\n===================\n" + _HELP + "\n===================\n" +
+                        "/" + LISTEN_CHANNEL + " help\n" +
+                        _HELP_HELP + "\n" +
+                        "------------------------\n" +
+                        "/" + LISTEN_CHANNEL + " my\n" +
+                        _HELP_MY + "\n" +
+                        "------------------------\n" +
+                        "/" + LISTEN_CHANNEL + " vote:<"+_YES+"/"+_NO+"/"+_ABST+">\n" +
+                        _HELP_VOTE + "\n"+
+                        "------------------------\n";
+    if (id == owner)
+    {
+        help_text += "/" + LISTEN_CHANNEL + " reset\n" +
+                    _HELP_RESET + "\n" +
+                    "------------------------\n" +
+                    "/" + LISTEN_CHANNEL + " stop\n" +
+                    _HELP_STOP + "\n" +
+                    "------------------------\n" +
+                    "/" + LISTEN_CHANNEL + " infos\n" +
+                    _HELP_INFOS + "\n" +
+                    "------------------------\n" +
+                    "/" + LISTEN_CHANNEL + " name:<vote_name>\n" +
+                    _HELP_NAME + "\n" +
+                    "------------------------\n";
+    }
+    llInstantMessage(id, help_text);
 }
 
 displayMy(key id, integer full)
