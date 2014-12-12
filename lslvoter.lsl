@@ -8,10 +8,14 @@
 // #######################
 //     STRINGS
 // #######################
+string _H1 = "\n==========================\n";
+string _H2 = "\n--------------------------\n";
 string _YES = "Yes";
 string _NO = "No";
 string _ABST = "Abstention";
 string _NOT_DEFINED = "Not defined";
+string _VOTE_NAME_ALREADY_DEFINED = "Vote name already defined";
+string _WAIT_FOR_NAME = "Waiting for the vote name";
 string _HAS_VOTED = "has voted.";
 string _HAS_VOTED_AGAIN = "has voted again.";
 string _NOT_ALLOWED = "You are not allowed to vote.";
@@ -31,20 +35,29 @@ string _VOTE_READY = "Vote ready";
 string _READY_TO_VOTE = "Ready to vote";
 string _VOTING = "Voting";
 string _STOP = "Stop";
+string _VOTE_NOT_READY = "Vote not ready";
 string _WRONG_VOTE_VALUE = "Wrong vote value";
 // infos
 string _DISPLAYING_INFOS = "Displaying infos";
+string _VOTE_NAME = "Vote name";
 string _INFOS = "Infos";
 string _MY_INFOS = "My infos";
+string _AVATAR_INFOS = "Avatar infos";
+string _CHAT_VOTE_INFOS = "Chat vote infos";
+string _CHAT_VOTE_CODE = "Chat vote code";
+string _VOTE_INFOS = "Vote infos";
 string _MY_KEY_IS = "My key is";
 string _MY_NAME_IS = "My name is";
 string _MY_CODE_IS = "My code is";
 string _MY_VOTE_IS = "My vote is";
+string _VOTE_YES_BY_CHAT = "Vote Yes by chat";
+string _VOTE_NO_BY_CHAT = "Vote No by chat";
+string _VOTE_ABST_BY_CHAT = "Vote Abstention by chat";
 // help
 string _HELP = "Help";
 string _HELP_HELP = "Displays this help message";
 string _HELP_MY = "Displays my personnal infos (uuid, name, code, vote)";
-string _HELP_VOTE = "Allows you to vote using the command line instead of touching the object (anybody can ear the vote with a script)";
+string _HELP_VOTE = "Allows you to vote using the command line instead of touching the object";
 string _HELP_RESET = "Resets the script (only for owner)";
 string _HELP_STOP = "Stops the vote and displays results (only for owner)";
 string _HELP_INFOS = "Displays the vote infos (who has not voted)(only for owner)";
@@ -61,20 +74,25 @@ string notecardName = "voters";
 
 // listener
 integer listenHandler;
-
+integer vote_ready = 0;
 // users
+key owner;
+// vote
+string vote_name = "";
 list presents = [];
 list absents = [];
 list votes = [];
 list votes_values = [];
 key voter;
 integer vote;
-key owner;
+string vote_code;
+// vote type : 1 = touch, 2 = chat
+integer vote_type;
 
 // init
 init()
 {
-    llSay(0, "\n==================\n    " + _INITIALISATION + "\n==================\n");
+    llSay(0, _H1 + _INITIALISATION +  _H1);
     votes_values = [_YES, _NO, _ABST];
     vote_name = _NOT_DEFINED;
 
@@ -115,7 +133,73 @@ init()
     notecardQueryId = llGetNotecardLine(notecardName, line);
 }
 
+
+// notecard
+key notecardQueryId;
+integer line;
+readNotecard(string data)
+{
+    //  if we are at the end of the file
+    if(data == EOF)
+    {
+        llSay(0, _NOTECARD_READ);
+        state wait_name;
+    }
+    else
+    {
+        //  if we are not working with a blank line
+        if(data != "")
+        {
+            //  if the line does not begin with a comment
+            if(llSubStringIndex(data, "#") != 0)
+            {
+                //  find first equal sign
+                integer i = llSubStringIndex(data, "=");
+
+                //  if line contains equal sign
+                if(i != -1)
+                {
+                    //  get name of name/value pair
+                    string name = llGetSubString(data, 0, i - 1);
+
+                    //  get value of name/value pair
+                    string value = llGetSubString(data, i + 1, -1);
+
+                    //  trim name
+                    name = llStringTrim(name, STRING_TRIM);
+
+                    //  trim value
+                    value = llStringTrim(value, STRING_TRIM);
+
+                    if (name != "" && value != "")
+                    {
+                        sortAvatar(name, value);
+                    }
+                }
+            }
+        }
+
+        //  read the next line
+        notecardQueryId = llGetNotecardLine(notecardName, ++line);
+    }
+}
+
+sortAvatar(string name, key id)
+{
+    string realName = llKey2Name(id);
+    if (realName != "")
+    {
+        // id, vote_code, yes_code, no_code, abst_code
+        presents = presents + [id, realName, randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4)];
+    }
+    else
+    {
+        absents = absents + [name];
+    }
+}
+
 // random code generator
+// source : http://wiki.secondlife.com/wiki/Random_Password_Generator
 string randomCodeGenerator(integer length)
 {
     string CharSet = "abcdefghijkmnpqrstuvwxyz23456789";    // omitting confusable characters
@@ -131,70 +215,47 @@ string randomCodeGenerator(integer length)
     return password;
 }
 
-// notecard
-key notecardQueryId;
-integer line;
-
-readNotecard(string data)
-{
-    //  if we are at the end of the file
-    if(data == EOF)
-    {
-        llSay(0, _NOTECARD_READ);
-        displayInfos(1, 0);
-    }
-
-    //  if we are not working with a blank line
-    if(data != "")
-    {
-        //  if the line does not begin with a comment
-        if(llSubStringIndex(data, "#") != 0)
-        {
-            //  find first equal sign
-            integer i = llSubStringIndex(data, "=");
-
-            //  if line contains equal sign
-            if(i != -1)
-            {
-                //  get name of name/value pair
-                string name = llGetSubString(data, 0, i - 1);
-
-                //  get value of name/value pair
-                string value = llGetSubString(data, i + 1, -1);
-
-                //  trim name
-                name = llStringTrim(name, STRING_TRIM);
-
-                //  trim value
-                value = llStringTrim(value, STRING_TRIM);
-
-                if (name != "" && value != "")
-                {
-                    sortAvatar(name, value);
-                }
-            }
-        }
-    }
-
-    //  read the next line
-    notecardQueryId = llGetNotecardLine(notecardName, ++line);
-}
-
-
-// vote
-string vote_name = "";
-
-recordVote()
+list getVoterInfos(key id)
 {
     // check if voter is in presents list
-    integer presents_index = llListFindList(presents, [voter]);
+    integer presents_index = llListFindList(presents, [id]);
     if (presents_index != -1)
     {
-        string voter_name = llList2String(presents, (presents_index + 1));
-        string voter_code = llList2String(presents, (presents_index + 2));
-        string vote_value = llList2String(votes_values, (vote - 2));
+        // get the voter infos
+        return llList2List(presents, presents_index, presents_index + 5);
+    }
+    else
+    {
+        return [];
+    }
+}
+
+// vote
+recordVote()
+{
+    // get the voter infos
+    list voter_infos = getVoterInfos(voter);
+    if (voter_infos != [])
+    {
+        // get the vote value
+        if (vote_type == 2)
+        {
+            integer vote_code_value = llListFindList(voter_infos, [vote_code]);
+            if (vote_code_value != -1)
+            {
+                vote = vote_code_value - 3;
+            }
+            else
+            {
+                llInstantMessage(voter, _WRONG_VOTE_VALUE);
+                state start;
+            }
+        }
 
         // check if the user has already voted
+        string voter_name = llList2String(voter_infos, 1);
+        string voter_code = llList2String(voter_infos, 2);
+        string vote_value = llList2String(votes_values, vote);
         integer votes_index = llListFindList(votes, [voter_code]);
         if (votes_index != -1)
         {
@@ -215,19 +276,6 @@ recordVote()
     state start;
 }
 
-sortAvatar(string name, key id)
-{
-    string realName = llKey2Name(id);
-    if (realName != "")
-    {
-        presents = presents + [id, realName, randomCodeGenerator(4)];
-    }
-    else
-    {
-        absents = absents + [name];
-    }
-}
-
 parseCommand(key id, string message)
 {
     // parse command
@@ -242,8 +290,15 @@ parseCommand(key id, string message)
         }
         else if (command == "name")
         {
-            vote_name = value;
-            llSay(0, _NAME_DEFINED_TO + " : " + vote_name);
+            if (vote_name == _NOT_DEFINED)
+            {
+                vote_name = value;
+                llSay(0, _NAME_DEFINED_TO + " : " + vote_name);
+            }
+            else
+            {
+                llSay(0, _VOTE_NAME_ALREADY_DEFINED);
+            }
         }
         else if (command == "infos")
         {
@@ -264,20 +319,24 @@ parseCommand(key id, string message)
     }
     else if (command == "vote")
     {
-        // get the voter and value
-        voter = id;
-        // get the vote value
-        integer votes_index = llListFindList(votes_values, [value]);
-        if (votes_index != -1)
+        if (vote_ready)
         {
-            vote = votes_index + 2;
-            state vote;
+            vote_type = 2;
+            voter = id;
+            if (value != "")
+            {
+                vote_code = value;
+                state vote;
+            }
+            else
+            {
+                llInstantMessage(id, _WRONG_VOTE_VALUE);
+            }
         }
         else
         {
-            llInstantMessage(id, _WRONG_VOTE_VALUE);
+            llInstantMessage(id, _VOTE_NOT_READY);
         }
-
     }
 }
 
@@ -290,7 +349,7 @@ displayHelp(key id)
                         "/" + LISTEN_CHANNEL + " my\n" +
                         _HELP_MY + "\n" +
                         "------------------------\n" +
-                        "/" + LISTEN_CHANNEL + " vote:<"+_YES+"/"+_NO+"/"+_ABST+">\n" +
+                        "/" + LISTEN_CHANNEL + " vote:<" + _CHAT_VOTE_CODE + ">\n" +
                         _HELP_VOTE + "\n"+
                         "------------------------\n";
     if (id == owner)
@@ -313,28 +372,40 @@ displayHelp(key id)
 
 displayMy(key id, integer full)
 {
-    // get values
-    integer presents_index = llListFindList(presents, [id]);
-    if (presents_index != -1)
+    // get the voter infos
+    list voter_infos = getVoterInfos(id);
+    if (voter_infos != [])
     {
         string my_key = (string)id;
-        string my_name = llList2String(presents, (presents_index + 1));
-        string my_code = llList2String(presents, (presents_index + 2));
+        string my_name = llList2String(voter_infos, 1);
+        string my_code = llList2String(voter_infos, 2);
+        string my_yes_code = llList2String(voter_infos, 3);
+        string my_no_code = llList2String(voter_infos, 4);
+        string my_abst_code = llList2String(voter_infos, 5);
+
         string my_vote = _NO_VOTE_YET;
         integer votes_index = llListFindList(votes, [my_code]);
         if (votes_index != -1)
         {
             my_vote = llList2String(votes, (votes_index + 1));
         }
-        string text = "\n===================\n" + _MY_INFOS + "\n===================\n";
+        string text = _H1 + _MY_INFOS + _H1;
         if (full)
         {
-            text += _MY_KEY_IS + " : " + my_key + "\n" +
-                    _MY_NAME_IS + " : " + my_name + "\n";
+            text += _AVATAR_INFOS + _H2 +
+                    _MY_KEY_IS + " : " + my_key + "\n" +
+                    _MY_NAME_IS + " : " + my_name +
+                    _H2 +
+                    _CHAT_VOTE_INFOS + _H2 +
+                    _VOTE_YES_BY_CHAT + " :\n/" + LISTEN_CHANNEL + " vote:" + my_yes_code + "\n\n" +
+                    _VOTE_NO_BY_CHAT + " :\n/" + LISTEN_CHANNEL + " vote:" + my_no_code + "\n\n" +
+                    _VOTE_ABST_BY_CHAT + " :\n/" + LISTEN_CHANNEL + " vote:" + my_abst_code +
+                    _H2;
         }
-        text += _MY_CODE_IS + " : " + my_code + "\n" +
-                _MY_VOTE_IS + " : " + my_vote + "\n" +
-        "------------------------";
+        text += _VOTE_INFOS + _H2 +
+                _MY_CODE_IS + " : " + my_code + "\n" +
+                _MY_VOTE_IS + " : " + my_vote +
+                _H2;
         llInstantMessage(id, text);
     }
     else
@@ -345,17 +416,18 @@ displayMy(key id, integer full)
 
 displayInfos(integer go_to_start, integer show_non_voted)
 {
-    string infos = "\n==========\n" + _INFOS + "\n==========\n";
+    string infos = _H1 + _INFOS + _H1;
+    infos += _VOTE_NAME + " : " + vote_name;
 
     // show presents
     integer presents_count = 0;
     integer presents_length = llGetListLength(presents);
-    infos += "--------------\n" + _PRESENTS + "\n--------------\n";
+    infos += _H2 + _PRESENTS + _H2;
     integer i = 0;
     while(i < presents_length)
     {
         infos += llList2String(presents, (i+1)) + "\n";
-        i = i + 3;
+        i = i + 6;
         presents_count++;
     }
     infos += _PRESENTS + " : (" + presents_count + ")\n";
@@ -363,7 +435,7 @@ displayInfos(integer go_to_start, integer show_non_voted)
     // show absents
     integer absents_count = 0;
     integer absents_length = llGetListLength(absents);
-    infos += "--------------\n" + _ABSENTS + "\n--------------\n";
+    infos += _H2 + _ABSENTS + _H2;
     i = 0;
     while(i < absents_length)
     {
@@ -377,7 +449,7 @@ displayInfos(integer go_to_start, integer show_non_voted)
     {
         // show who has not voted
         integer non_voted_count = 0;
-        infos += "--------------\n" + _NON_VOTED + "\n--------------\n";
+        infos += _H2 + _NON_VOTED + _H2;
         i = 0;
         while(i < presents_length)
         {
@@ -387,7 +459,7 @@ displayInfos(integer go_to_start, integer show_non_voted)
                 infos += llList2String(presents, (i+1)) + "\n";
                 non_voted_count++;
             }
-            i = i + 3;
+            i = i + 6;
         }
         infos += _NON_VOTED + " : (" + non_voted_count + ")\n";
     }
@@ -407,7 +479,7 @@ displayResults()
     integer yes_votes = 0;
     integer no_votes = 0;
     integer abst_votes = 0;
-    string text = "\n===============\n" + _RESULTS + "\n===============\n";
+    string text = _H1 + _RESULTS + _H1;
     integer votes_length = llGetListLength(votes);
     if (votes_length > 0)
     {
@@ -461,6 +533,7 @@ default
         owner = llGetOwner();
         init();
         listenHandler = llListen(LISTEN_CHANNEL, "", "", "");
+        vote_ready = 0;
     }
 
     dataserver(key request_id, string data)
@@ -468,6 +541,42 @@ default
         if(request_id == notecardQueryId)
         {
             readNotecard(data);
+        }
+    }
+
+    listen(integer channel, string name, key id, string message)
+    {
+        parseCommand(id, message);
+    }
+}
+
+state wait_name
+{
+    on_rez(integer start_param)
+    {
+        llResetScript();
+    }
+
+    changed(integer change)
+    {
+        if(change & (CHANGED_OWNER | CHANGED_INVENTORY))
+        {
+            llResetScript();
+        }
+    }
+
+    state_entry()
+    {
+        llSay(0, _H1 + _WAIT_FOR_NAME + _H1);
+        listenHandler = llListen(LISTEN_CHANNEL, "", "", "");
+        vote_ready = 0;
+    }
+
+    touch_start(integer num_detected)
+    {
+        if (llDetectedKey(0) == owner && vote_name != _NOT_DEFINED)
+        {
+            displayInfos(1, 0);
         }
     }
 
@@ -494,17 +603,19 @@ state start
 
     state_entry()
     {
-        llSay(0, "\n===============\n" + _VOTE_READY + "\n===============");
+        llSay(0, _H2 + _VOTE_READY + _H2);
         llSetText(_READY_TO_VOTE, <0.0, 1.0, 0.0>, 1.0);
         llSetColor(<0.0, 0.0, 0.0>, ALL_SIDES);
         listenHandler = llListen(LISTEN_CHANNEL, "", "", "");
+        vote_ready = 1;
     }
 
     touch_start(integer num_detected)
     {
+        vote_type = 1;
         voter = llDetectedKey(0);
-        vote = llDetectedLinkNumber(0);
-        if (vote > 1)
+        vote = (llDetectedLinkNumber(0) - 2);
+        if (vote >= 0)
         {
             state vote;
         }
@@ -536,6 +647,7 @@ state vote
         llSetText(_VOTING, <1.0, 0.0, 0.0>, 1.0);
         llSetColor(<1.0, 0.0, 0.0>, ALL_SIDES);
         listenHandler = llListen(LISTEN_CHANNEL, "", "", "");
+        vote_ready = 0;
         recordVote();
     }
 
@@ -565,6 +677,7 @@ state display_infos
         llSetText(_DISPLAYING_INFOS, <1.0, 0.0, 0.0>, 1.0);
         llSetColor(<1.0, 0.0, 0.0>, ALL_SIDES);
         listenHandler = llListen(33, "", "", "");
+        vote_ready = 0;
         displayInfos(1, 1);
     }
 
@@ -603,6 +716,7 @@ state stop
             PRIM_TEXT, "", ZERO_VECTOR, 0.0,
             PRIM_COLOR, ALL_SIDES, <1.0, 0.0, 0.0>, 0.0]);
         listenHandler = llListen(LISTEN_CHANNEL, "", "", "");
+        vote_ready = 0;
         displayInfos(0, 1);
         displayResults();
     }
