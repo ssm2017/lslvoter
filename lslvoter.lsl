@@ -15,10 +15,11 @@ string _NO = "No";
 string _ABST = "Abstention";
 string _NOT_DEFINED = "Not defined";
 string _VOTE_NAME_ALREADY_DEFINED = "Vote name already defined";
-string _WAIT_FOR_NAME = "Waiting for the vote name";
+string _WAIT_FOR_NAME = "The owner of the script must define a vote name using chat.";
 string _HAS_VOTED = "has voted.";
 string _HAS_VOTED_AGAIN = "has voted again.";
 string _NOT_ALLOWED = "You are not allowed to vote.";
+string _NOT_ALLOWED_TRY = "Someone unauthorized has tried to vote";
 string _NOTECARD_READ = "We are done reading the notecard";
 string _MISSING_NOTECARD = "Missing inventory notecard";
 string _READING_NOTECARD = "Reading notecard";
@@ -271,6 +272,7 @@ recordVote()
     }
     else
     {
+        llSay(0, _NOT_ALLOWED_TRY);
         llInstantMessage(voter, _NOT_ALLOWED);
     }
     state start;
@@ -505,6 +507,10 @@ displayResults()
             }
             i = i + 2;
         }
+        text += _H2 + "\n"+ _YES + " : " + (string) yes_votes;
+        text += "\n"+ _NO + " : " + (string) no_votes;
+        text += "\n"+ _ABST + " : " + (string) abst_votes;
+        text += _H2;
     }
     else
     {
@@ -615,7 +621,7 @@ state start
         vote_type = 1;
         voter = llDetectedKey(0);
         vote = (llDetectedLinkNumber(0) - 2);
-        if (vote >= 0)
+        if (vote >= 0 && vote < 3)
         {
             state vote;
         }
