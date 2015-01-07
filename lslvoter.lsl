@@ -15,7 +15,7 @@ string _NO = "No";
 string _ABST = "Abstention";
 string _NOT_DEFINED = "Not defined";
 string _VOTE_NAME_ALREADY_DEFINED = "Vote name already defined";
-string _WAIT_FOR_NAME = "The owner of the script must define a vote name using chat.";
+string _WAIT_FOR_NAME = "The owner of the script must define a vote name using chat and then click on the object.";
 string _HAS_VOTED = "has voted.";
 string _HAS_VOTED_AGAIN = "has voted again.";
 string _NOT_ALLOWED = "You are not allowed to vote.";
@@ -27,6 +27,11 @@ string _INITIALISATION = "Initialisation";
 string _NAME_DEFINED_TO = "Name defined to";
 string _PRESENTS = "Presents";
 string _ABSENTS = "Absents";
+string _DELEGATIONS = "Delegations";
+string _DELEGATE_ABSENT = "Delegate absent";
+string _YOU_HAVE_VOTED = "You have voted";
+string _FOR = "for";
+string _IS_REPRESENTED_BY = "is represented by";
 string _VOTES = "Votes";
 string _NO_VOTE_YET = "No vote yet";
 string _NO_VOTES = "No votes";
@@ -80,8 +85,13 @@ integer vote_ready = 0;
 key owner;
 // vote
 string vote_name = "";
+// presents list = id, realname, vote_code, yes_code, no_code, abst_code
 list presents = [];
+// absents list = name
 list absents = [];
+// delegates list = delegate_id, id, name, vote_code, yes_code, no_code, abst_code
+list delegates = [];
+// votes list = voter_code, vote_value
 list votes = [];
 list votes_values = [];
 key voter;
@@ -154,28 +164,30 @@ readNotecard(string data)
             //  if the line does not begin with a comment
             if(llSubStringIndex(data, "#") != 0)
             {
-                //  find first equal sign
-                integer i = llSubStringIndex(data, "=");
-
-                //  if line contains equal sign
-                if(i != -1)
+                // see if there are some delegates
+                list delegates_entries = llParseString2List( data, [ "+" ], [] );
+                integer delegates_qty = llGetListLength(delegates_entries);
+                if (delegates_qty > 1)
                 {
-                    //  get name of name/value pair
-                    string name = llGetSubString(data, 0, i - 1);
-
-                    //  get value of name/value pair
-                    string value = llGetSubString(data, i + 1, -1);
-
-                    //  trim name
-                    name = llStringTrim(name, STRING_TRIM);
-
-                    //  trim value
-                    value = llStringTrim(value, STRING_TRIM);
-
-                    if (name != "" && value != "")
+                    // get the first avatar
+                    key delegate_id = sortAvatar(llList2String(delegates_entries, 0), 0, NULL_KEY);
+                    if (delegate_id != NULL_KEY)
                     {
-                        sortAvatar(name, value);
+                        integer i;
+                        for (i=1; i<delegates_qty;i++)
+                        {
+                            sortAvatar(llList2String(delegates_entries, i), 1, delegate_id);
+                        }
                     }
+                    else
+                    {
+                        llSay(0, _DELEGATE_ABSENT);
+                        return;
+                    }
+                }
+                else
+                {
+                    sortAvatar(llList2String(delegates_entries, 0), 0, NULL_KEY);
                 }
             }
         }
@@ -185,18 +197,52 @@ readNotecard(string data)
     }
 }
 
-sortAvatar(string name, key id)
+key sortAvatar(string data, integer delegated, key delegate_id)
 {
-    string realName = llKey2Name(id);
-    if (realName != "")
+    key id = NULL_KEY;
+    //  find first equal sign
+    integer i = llSubStringIndex(data, "=");
+
+    //  if line contains equal sign
+    if(i != -1)
     {
-        // id, vote_code, yes_code, no_code, abst_code
-        presents = presents + [id, realName, randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4)];
+        //  get name of name/value pair
+        string name = llStringTrim(llGetSubString(data, 0, i - 1), STRING_TRIM);
+
+        //  get value of name/value pair
+        id = (key)llStringTrim(llGetSubString(data, i + 1, -1), STRING_TRIM);
+
+        if (name != "" && id != NULL_KEY)
+        {
+            if (delegated)
+            {
+                delegates = delegates + [delegate_id, id, name, randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4)];
+            }
+            else
+            {
+                string realName = llKey2Name(id);
+                if (realName != "")
+                {
+                    presents = presents + [id, realName, randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4), randomCodeGenerator(4)];
+                }
+                else
+                {
+                    absents = absents + [name];
+                    return NULL_KEY;
+                }
+            }
+        }
+        else
+        {
+            return NULL_KEY;
+        }
     }
     else
     {
-        absents = absents + [name];
+        return NULL_KEY;
     }
+
+    return id;
 }
 
 // random code generator
@@ -231,6 +277,27 @@ list getVoterInfos(key id)
     }
 }
 
+list getDelegations(key id)
+{
+    list delegations = [];
+    // check if coter is in delegations list
+    integer delegates_index = llListFindList(delegates, [id]);
+    if (delegates_index != -1)
+    {
+        // loop in the list to find others
+        integer delegates_length = llGetListLength(delegates);
+        integer i;
+        for (i=0; i<delegates_length; i++)
+        {
+            if (llList2Key(delegates, i) == id)
+            {
+                delegations = delegations + llList2List(delegates, i+1, i+6);
+            }
+        }
+    }
+    return delegations;
+}
+
 // vote
 recordVote()
 {
@@ -248,8 +315,21 @@ recordVote()
             }
             else
             {
-                llInstantMessage(voter, _WRONG_VOTE_VALUE);
-                state start;
+                // check if the code is in delegation
+                list delegations = getDelegations(voter);
+                integer delegations_vote_code_value = llListFindList(delegations, [vote_code]);
+                if (delegations_vote_code_value != -1)
+                {
+                    // get voter infos
+                    integer idx = (delegations_vote_code_value / 6) * 6;
+                    voter_infos = llList2List(delegations, idx, idx + 5);
+                    vote = llListFindList(voter_infos, [vote_code]) - 3;
+                }
+                else
+                {
+                    llInstantMessage(voter, _WRONG_VOTE_VALUE);
+                    state start;
+                }
             }
         }
 
@@ -276,6 +356,19 @@ recordVote()
         llInstantMessage(voter, _NOT_ALLOWED);
     }
     state start;
+}
+
+string getVote(string vote_code)
+{
+    integer votes_index = llListFindList(votes, [vote_code]);
+    if (votes_index != -1)
+    {
+        return llList2String(votes, (votes_index + 1));
+    }
+    else
+    {
+        return "";
+    }
 }
 
 parseCommand(key id, string message)
@@ -386,11 +479,8 @@ displayMy(key id, integer full)
         string my_abst_code = llList2String(voter_infos, 5);
 
         string my_vote = _NO_VOTE_YET;
-        integer votes_index = llListFindList(votes, [my_code]);
-        if (votes_index != -1)
-        {
-            my_vote = llList2String(votes, (votes_index + 1));
-        }
+        my_vote = getVote(my_code);
+
         string text = _H1 + _MY_INFOS + _H1;
         if (full)
         {
@@ -408,7 +498,37 @@ displayMy(key id, integer full)
                 _MY_CODE_IS + " : " + my_code + "\n" +
                 _MY_VOTE_IS + " : " + my_vote +
                 _H2;
-        llInstantMessage(id, text);
+
+        // check if delegates
+        list delegations = getDelegations(id);
+        if (delegations != [])
+        {
+            text += _H1 + _DELEGATIONS + _H1;
+            // get values
+            integer delegations_length = llGetListLength(delegations);
+            integer i;
+            for (i=0; i<delegations_length; i++)
+            {
+                string delegation_name = llList2String(delegations, i+1);
+                string delegation_code = llList2String(delegations, i+2);
+                if (full)
+                {
+                    text += delegation_name + " = " + delegation_code;
+                    text += _H2 +
+                            _VOTE_YES_BY_CHAT + " " + _FOR + " " + delegation_name + " :\n/" + LISTEN_CHANNEL + " vote:" + llList2String(delegations, i+3) + "\n\n" +
+                            _VOTE_NO_BY_CHAT + " " + _FOR + " " + delegation_name + " :\n/" + LISTEN_CHANNEL + " vote:" + llList2String(delegations, i+4) + "\n\n" +
+                            _VOTE_ABST_BY_CHAT + " " + _FOR + " " + delegation_name + " :\n/" + LISTEN_CHANNEL + " vote:" + llList2String(delegations, i+5) +
+                            _H2;
+                }
+                string delegation_vote = getVote(delegation_code);
+                if (delegation_vote != "")
+                {
+                    text += _YOU_HAVE_VOTED + " " + delegation_vote + " " + _FOR + " " + delegation_name + "\n";
+                }
+                i = i+5;
+            }
+            llInstantMessage(id, text);
+        }
     }
     else
     {
@@ -433,6 +553,19 @@ displayInfos(integer go_to_start, integer show_non_voted)
         presents_count++;
     }
     infos += _PRESENTS + " : (" + presents_count + ")\n";
+
+    // show delegates
+    integer delegates_count = 0;
+    integer delegates_length = llGetListLength(delegates);
+    infos += _H2 + _DELEGATIONS + _H2;
+    i = 0;
+    while(i < delegates_length)
+    {
+        infos += llList2String(delegates, (i+2)) + " " + _IS_REPRESENTED_BY + " " + llKey2Name(llList2Key(delegates, (i))) + "\n";
+        i = i + 7;
+        delegates_count++;
+    }
+    infos += _DELEGATIONS + " : (" + delegates_count + ")\n";
 
     // show absents
     integer absents_count = 0;
@@ -462,6 +595,20 @@ displayInfos(integer go_to_start, integer show_non_voted)
                 non_voted_count++;
             }
             i = i + 6;
+        }
+        integer delegates_qty = llGetListLength(delegates);
+        if (delegates_qty)
+        {
+            i = 0;
+            while(i < delegates_qty)
+            {
+                if (llListFindList(votes, [llList2String(delegates, (i+3))]) == -1)
+                {
+                    infos += llList2String(delegates, (i+2)) + "\n";
+                    non_voted_count++;
+                }
+                i = i + 7;
+            }
         }
         infos += _NON_VOTED + " : (" + non_voted_count + ")\n";
     }
@@ -493,11 +640,11 @@ displayResults()
             code = llList2String(votes, i);
             value = llList2String(votes, (i+1));
             text += code + " : " + value + "\n";
-            if (code == _YES)
+            if (value == _YES)
             {
                 yes_votes++;
             }
-            else if (code == _NO)
+            else if (value == _NO)
             {
                 no_votes++;
             }
