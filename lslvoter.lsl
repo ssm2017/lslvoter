@@ -527,8 +527,8 @@ displayMy(key id, integer full)
                 }
                 i = i+5;
             }
-            llInstantMessage(id, text);
         }
+        llInstantMessage(id, text);
     }
     else
     {
